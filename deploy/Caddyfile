@@ -1,0 +1,77 @@
+# The backend and identity proxy must be reachable only on private networks.
+# SHORTLINKS_PROXY_KEY must equal the contents of the backend proxy key file.
+# Do not enable request-body logging or log destinations containing credentials.
+(shortlinks_backend) {
+	reverse_proxy {$SHORTLINKS_UPSTREAM:shortlinks:8080} {
+		header_up X-Shortlinks-Proxy-Key {$SHORTLINKS_PROXY_KEY}
+		header_up X-Real-IP {remote_host}
+		header_up -Authorization
+		header_up -Cookie
+	}
+}
+
+{$SHORTLINKS_HOST:s.2050.su} {
+	header Referrer-Policy no-referrer
+	header X-Content-Type-Options nosniff
+	route {
+		request_header -X-Shortlinks-Proxy-Key
+		request_header -X-Auth-Request-*
+		request_header -X-Forwarded-User
+		request_header -X-Forwarded-Groups
+		request_header -X-Real-IP
+
+		@short path_regexp code ^/[A-Za-z0-9]{8}$
+		handle @short {
+			import shortlinks_backend
+		}
+		handle /healthz {
+			import shortlinks_backend
+		}
+		handle /oauth2/* {
+			reverse_proxy {$SHORTLINKS_AUTH_UPSTREAM:oauth2-proxy:4180}
+		}
+		handle {
+			reverse_proxy {$SHORTLINKS_AUTH_UPSTREAM:oauth2-proxy:4180} {
+				method GET
+				rewrite /oauth2/auth
+				header_up X-Forwarded-Method {method}
+				header_up X-Forwarded-Uri {uri}
+				@verified {
+					status 2xx
+					header X-Auth-Request-User *
+					header X-Auth-Request-Groups *
+				}
+				handle_response @verified {
+					route {
+						request_header X-Auth-Request-User {rp.header.X-Auth-Request-User}
+						request_header X-Auth-Request-Groups {rp.header.X-Auth-Request-Groups}
+						@bad_identity not header_regexp X-Auth-Request-User ^[A-Za-z0-9][A-Za-z0-9._@:/-]{0,199}$
+						respond @bad_identity 403
+						# A comma-delimited groups header is emitted by oauth2-proxy.
+						@links header_regexp X-Auth-Request-Groups "(^|[, ])/links([, ]|$)"
+						handle @links {
+							import shortlinks_backend
+						}
+						respond 403
+					}
+				}
+				@missing_identity status 2xx
+				handle_response @missing_identity {
+					respond 403
+				}
+				@login status 401
+				handle_response @login {
+					@navigation {
+						method GET
+						header Accept *text/html*
+						not header Authorization *
+					}
+					route {
+						redir @navigation /oauth2/start?rd=https://{$SHORTLINKS_HOST:s.2050.su}/manage 302
+						respond 401
+					}
+				}
+			}
+		}
+	}
+}

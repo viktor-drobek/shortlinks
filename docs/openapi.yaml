@@ -1,0 +1,47 @@
+openapi: 3.1.0
+info:
+  title: Shortlinks API
+  version: 1.0.0
+servers:
+  - url: https://s.2050.su
+paths:
+  /api/v1/links:
+    get:
+      responses: {'200': {description: Owner links}}
+    post:
+      parameters:
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CreateLink'}}}
+      responses: {'201': {description: Created}, '409': {description: Idempotency conflict}}
+  /api/v1/links/{id}:
+    parameters: [{name: id, in: path, required: true, schema: {type: string}}]
+    get: {responses: {'200': {description: Link}, '404': {description: Not found}}}
+    delete: {responses: {'204': {description: Revoked}, '404': {description: Not found}}}
+components:
+  parameters:
+    IdempotencyKey: {name: Idempotency-Key, in: header, schema: {type: string, maxLength: 128}}
+  schemas:
+    CreateLink:
+      type: object
+      additionalProperties: false
+      required: [url]
+      properties:
+        url: {type: string, format: uri}
+        title: {type: string, maxLength: 256}
+        expires_at: {type: [string, 'null'], format: date-time}
+    Link:
+      type: object
+      required: [id, code, short_url, url, title, created_at]
+      properties:
+        id: {type: string}
+        code: {type: string, minLength: 8, maxLength: 8}
+        short_url: {type: string, format: uri}
+        url: {type: string, format: uri}
+        title: {type: string}
+        created_at: {type: string, format: date-time}
+        expires_at: {type: [string, 'null'], format: date-time}
+        pending_since: {type: [string, 'null'], format: date-time}
+        last_checked_at: {type: [string, 'null'], format: date-time}
+        next_check_at: {type: [string, 'null'], format: date-time}

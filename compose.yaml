@@ -1,0 +1,36 @@
+services:
+  shortlinks:
+    build:
+      context: .
+    image: shortlinks:local
+    restart: unless-stopped
+    read_only: true
+    user: "65532:65532"
+    environment:
+      SHORTLINKS_LISTEN: ":8080"
+      SHORTLINKS_BASE_URL: "${SHORTLINKS_BASE_URL:?set the public HTTPS base URL}"
+      SHORTLINKS_ORIGIN: "${SHORTLINKS_BASE_URL:?set the public HTTPS base URL}"
+      SHORTLINKS_DB: /data/shortlinks.db
+      SHORTLINKS_KEY_FILE: /run/secrets/shortlinks_encryption_key
+      SHORTLINKS_PROXY_KEY_FILE: /run/secrets/shortlinks_proxy_key
+    volumes:
+      - type: bind
+        source: ${SHORTLINKS_DATA_DIR:?set a private host data directory owned by UID 65532}
+        target: /data
+      - type: bind
+        source: ${SHORTLINKS_ENCRYPTION_KEY_FILE:?set an absolute path to the encryption key}
+        target: /run/secrets/shortlinks_encryption_key
+        read_only: true
+      - type: bind
+        source: ${SHORTLINKS_PROXY_KEY_FILE:?set an absolute path to the proxy assertion key}
+        target: /run/secrets/shortlinks_proxy_key
+        read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,mode=1777
+    ports:
+      - "127.0.0.1:8080:8080"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+

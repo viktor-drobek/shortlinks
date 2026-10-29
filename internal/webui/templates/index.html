@@ -1,0 +1,77 @@
+{{define "manage"}}
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Короткие ссылки</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/app.js" defer></script>
+</head>
+<body>
+<header class="top">
+	<div class="top-inner">
+		<span class="brand">Короткие ссылки</span>
+		<span class="user">{{.User}}</span>
+	</div>
+</header>
+
+<main class="layout">
+	<section class="col create">
+		<h1>Новая ссылка</h1>
+		{{if .Error}}<p class="msg error" role="alert">{{.Error}}</p>{{end}}
+		{{if .Notice}}<p class="msg ok" role="status">{{.Notice}}</p>{{end}}
+
+		<form method="post" action="/manage" class="form">
+			<input type="hidden" name="csrf" value="{{.CSRF}}">
+			<div class="field">
+				<label for="url">Адрес</label>
+				<input id="url" name="url" type="text" required autocomplete="off"
+					placeholder="https://example.com/path">
+			</div>
+			<div class="field">
+				<label for="title">Название <span class="opt">необязательно</span></label>
+				<input id="title" name="title" type="text" maxlength="256" autocomplete="off"
+					placeholder="Как ссылку назвать">
+			</div>
+			<div class="field">
+				<label for="expires_at">Истекает <span class="opt">необязательно</span></label>
+				<input id="expires_at" name="expires_at" type="text" autocomplete="off"
+					placeholder="2026-12-31 23:59">
+				<p class="hint">Укажите время UTC, например 2026-12-31 23:59. Без даты ссылка бессрочная.</p>
+			</div>
+			<button type="submit" class="btn">Сократить</button>
+		</form>
+	</section>
+
+	<section class="col list">
+		<h2>Ссылки</h2>
+		{{if .Links}}
+		<ul class="links">
+			{{range .Links}}
+			<li class="link">
+				<div class="link-main">
+					<a href="{{.ShortURL}}">{{.ShortURL}}</a>
+					{{if .Title}}<span class="link-title">{{.Title}}</span>{{end}}
+					<p class="link-target">{{.URL}}</p>
+					<p class="link-meta">создана {{.Created}} · {{.Expires}}{{with .Pending}} · <span class="pending">{{.}}</span>{{end}}</p>
+				</div>
+				<form method="post" action="/manage/{{.ID}}/delete" class="delete" data-confirm="Удалить ссылку? Код станет недоступен навсегда.">
+					<input type="hidden" name="csrf" value="{{$.CSRF}}">
+					<button type="submit" class="btn danger">Удалить</button>
+				</form>
+			</li>
+			{{end}}
+		</ul>
+		{{else}}
+		<p class="empty">Пока нет ссылок. Создайте первую через форму слева.</p>
+		{{end}}
+	</section>
+</main>
+
+<footer class="foot">
+	<span>Короткие ссылки · {{.User}}</span>
+</footer>
+</body>
+</html>
+{{end}}

@@ -1,0 +1,15 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+/data
+secrets
+*.db
+*.db-shm
+*.db-wal
+*.key
+*.pem
+*.crt
+coverage.out
+bin

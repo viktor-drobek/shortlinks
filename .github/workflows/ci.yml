@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test, vet, and security checks
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version: "1.26.10"
+          check-latest: false
+      - name: Download modules
+        run: go mod download
+      - name: Test with race detector
+        run: go test -race ./...
+      - name: Vet
+        run: go vet ./...
+      - name: Install pinned security tools
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.30.0
+          go install github.com/zricethezav/gitleaks/v8@v8.30.1
+      - name: Check known vulnerabilities
+        run: govulncheck ./...
+      - name: Run Go security analysis
+        run: gosec ./...
+      - name: Scan tracked history for secrets
+        run: gitleaks git --redact --no-banner
+
+  docker:
+    name: Build container
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Build Docker image
+        run: docker build --pull --tag shortlinks:ci .
+
+  oidc-proxy-contract:
+    name: OIDC proxy contract (manual operator check)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Explain non-secret validation boundary
+        run: |
+          echo 'OIDC integration needs an operator-provided, disposable identity provider and proxy configuration.'
+          echo 'It is deliberately not executed for untrusted pull requests and accepts no repository secrets.'
+          echo 'Validate the reverse-proxy contract in docs/deployment.md in a controlled environment.'

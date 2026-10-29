@@ -1,0 +1,25 @@
+# Build and test output
+/bin/
+*.test
+*.out
+coverage.out
+
+# Local runtime data and SQLite sidecars
+/data/
+*.db
+*.db-shm
+*.db-wal
+
+# Private configuration and secret material
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.crt
+secrets/
+
+# Editor and OS files
+.DS_Store
+.idea/
+.vscode/
