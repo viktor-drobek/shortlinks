@@ -1,0 +1,3 @@
+# Public oauth2-proxy image reference in the initial CI bootstrap commit.
+# Keep this exact historical fingerprint only; scan all other content normally.
+ba65a01deaa775cddd656d85aa848f94310bbdaa:.github/workflows/ci.yml:generic-api-key:37

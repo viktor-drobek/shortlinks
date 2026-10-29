@@ -152,7 +152,11 @@ func (s *Store) Create(ctx context.Context, owner, id, code, url, title string, 
 			if e = tx.Rollback(); e != nil {
 				return Link{}, e
 			}
-			return s.Get(ctx, owner, lid)
+			link, err := s.Get(ctx, owner, lid)
+			if errors.Is(err, ErrNotFound) {
+				return Link{}, ErrIdempotencyConflict
+			}
+			return link, err
 		}
 		if e != sql.ErrNoRows {
 			return Link{}, e
