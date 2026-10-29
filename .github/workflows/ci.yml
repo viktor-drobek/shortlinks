@@ -19,6 +19,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
@@ -30,6 +31,10 @@ jobs:
         run: go test -race ./...
       - name: Vet
         run: go vet ./...
+      - name: Test reverse-proxy trust boundary
+        run: go run ./tests/proxy
+      - name: Test OIDC bearer and group contract
+        run: go run ./tests/oidc
       - name: Install pinned security tools
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
@@ -52,18 +57,6 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: Build Docker image
         run: docker build --pull --tag shortlinks:ci .
-
-  oidc-proxy-contract:
-    name: OIDC proxy contract (manual operator check)
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-    steps:
-      - name: Explain non-secret validation boundary
-        run: |
-          echo 'OIDC integration needs an operator-provided, disposable identity provider and proxy configuration.'
-          echo 'It is deliberately not executed for untrusted pull requests and accepts no repository secrets.'
-          echo 'Validate the reverse-proxy contract in docs/deployment.md in a controlled environment.'

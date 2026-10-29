@@ -23,8 +23,14 @@ export SHORTLINKS_BASE_URL='https://s.2050.su'
 export SHORTLINKS_DATA_DIR="$PWD/data"
 export SHORTLINKS_ENCRYPTION_KEY_FILE="$PWD/secrets/encryption.key"
 export SHORTLINKS_PROXY_KEY_FILE="$PWD/secrets/proxy.key"
-install -d -m 0700 "$SHORTLINKS_DATA_DIR"
-chown 65532:65532 "$SHORTLINKS_DATA_DIR"
+install -d -m 0700 "$PWD/secrets"
+# Create keys only for a new installation. Never overwrite existing keys.
+(umask 077; set -C; openssl rand -hex 32 > "$SHORTLINKS_ENCRYPTION_KEY_FILE")
+(umask 077; set -C; openssl rand -hex 32 > "$SHORTLINKS_PROXY_KEY_FILE")
+sudo install -d -m 0700 -o 65532 -g 65532 "$SHORTLINKS_DATA_DIR"
+sudo chown 65532:65532 "$SHORTLINKS_ENCRYPTION_KEY_FILE" "$SHORTLINKS_PROXY_KEY_FILE"
+sudo chmod 0600 "$SHORTLINKS_ENCRYPTION_KEY_FILE" "$SHORTLINKS_PROXY_KEY_FILE"
+docker compose config --quiet
 docker compose up --build -d
 ```
 

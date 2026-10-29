@@ -78,6 +78,8 @@ func (c Checker) Check(ctx context.Context, rawURL string) Result {
 	client := &http.Client{
 		Transport: tr,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			// Go otherwise adds the previous bearer URL as the Referer.
+			req.Header.Del("Referer")
 			if len(via) >= maxRedirects {
 				return errRedirectLimit
 			}
@@ -199,7 +201,7 @@ func pinnedIP(ips []netip.Addr) (netip.Addr, error) {
 	}
 	valid := make([]netip.Addr, 0, len(ips))
 	for _, ip := range ips {
-		if ip.Is4In6() || !publicIP(net.IP(ip.AsSlice())) {
+		if ip.Zone() != "" || ip.Is4In6() || !publicIP(net.IP(ip.AsSlice())) {
 			return netip.Addr{}, errBlocked
 		}
 		valid = append(valid, ip)
@@ -225,16 +227,18 @@ func publicIP(ip net.IP) bool {
 		return publicIPv4(v4)
 	}
 	v6 := ip.To16()
-	if v6 == nil || isIPv4Mapped(v6) {
+	// Only the currently allocated global-unicast block is eligible. This
+	// excludes local NAT64/translation, discard-only, and future-use ranges.
+	if v6 == nil || v6[0]&0xe0 != 0x20 || isIPv4Mapped(v6) {
 		return false
 	}
 	if ip.IsLoopback() || ip.IsUnspecified() || ip.IsMulticast() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
 		return false
 	}
-	// Unique local fc00::/7, documentation 2001:db8::/32, Teredo 2001::/32,
-	// 6to4 2002::/16, and IPv4-compatible ::/96 are not public destinations.
-	if v6[0]&0xfe == 0xfc || (v6[0] == 0x20 && v6[1] == 0x01 && (v6[2] == 0x00 || (v6[2] == 0x0d && v6[3] == 0xb8))) ||
-		(v6[0] == 0x20 && v6[1] == 0x02) || allZero(v6[:12]) {
+	// Exclude the IETF special-purpose block 2001::/23, documentation
+	// 2001:db8::/32 and 3fff::/20, and the 6to4 transition block 2002::/16.
+	if (v6[0] == 0x20 && v6[1] == 0x01 && (v6[2] < 2 || (v6[2] == 0x0d && v6[3] == 0xb8))) ||
+		(v6[0] == 0x20 && v6[1] == 0x02) || (v6[0] == 0x3f && v6[1] == 0xff && v6[2]&0xf0 == 0) {
 		return false
 	}
 	return true
@@ -293,7 +297,7 @@ func validateURL(raw string) error {
 	}
 	host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
 	if ip, err := netip.ParseAddr(host); err == nil {
-		if ip.Is4In6() || !publicIP(net.IP(ip.AsSlice())) {
+		if ip.Zone() != "" || ip.Is4In6() || !publicIP(net.IP(ip.AsSlice())) {
 			return errBlocked
 		}
 		return nil

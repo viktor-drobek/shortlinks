@@ -121,7 +121,7 @@ func fixtureConfig(address, issuerURL string) string {
 	if _, err := rand.Read(random[:]); err != nil {
 		panic(err)
 	}
-	cookieSecret := base64.StdEncoding.EncodeToString(random[:])
+	cookieSecret := base64.RawURLEncoding.EncodeToString(random[:])
 	return fmt.Sprintf(`provider = "oidc"
 client_id = %q
 client_secret = %q

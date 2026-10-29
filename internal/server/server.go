@@ -104,8 +104,31 @@ func (s *Server) apiLinks(w http.ResponseWriter, r *http.Request) {
 		respond(w, 200, links(ls, s.c.BaseURL))
 		return
 	}
+	if r.Method == http.MethodDelete {
+		if r.Header.Get("X-Shortlinks-Client") != "api" || !originOK(r, s.c.Origin) {
+			fail(w, 403, "forbidden")
+			return
+		}
+		key := r.Header.Get("Idempotency-Key")
+		if !lowerHex64(key) {
+			fail(w, 400, "invalid idempotency key")
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, 1)
+		b, e := io.ReadAll(r.Body)
+		if e != nil || len(b) != 0 {
+			fail(w, 400, "DELETE body must be empty")
+			return
+		}
+		if e = s.c.Store.RevokeKey(r.Context(), owner, key); e != nil {
+			fail(w, 500, "internal error")
+			return
+		}
+		w.WriteHeader(204)
+		return
+	}
 	if r.Method != "POST" {
-		w.Header().Set("Allow", "GET, POST")
+		w.Header().Set("Allow", "GET, POST, DELETE")
 		w.WriteHeader(405)
 		return
 	}
@@ -171,6 +194,17 @@ func (s *Server) apiLinks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respond(w, 201, link(l, s.c.BaseURL))
+}
+func lowerHex64(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for _, c := range s {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
 }
 func (s *Server) apiLink(w http.ResponseWriter, r *http.Request) {
 	owner, ok := s.owner(r)

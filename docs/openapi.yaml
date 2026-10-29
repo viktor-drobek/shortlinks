@@ -4,23 +4,74 @@ info:
   version: 1.0.0
 servers:
   - url: https://s.2050.su
+security:
+  - ProxyBearer: []
 paths:
+  /{code}:
+    parameters:
+      - name: code
+        in: path
+        required: true
+        schema: {type: string, pattern: '^[A-Za-z0-9]{8}$'}
+    get:
+      security: []
+      responses:
+        '302': {description: Redirect to the complete stored destination}
+        '404': {description: Unknown or revoked code}
+        '410': {description: Expired code}
+        '429': {description: Too many requests}
+    head:
+      security: []
+      responses:
+        '302': {description: Same redirect headers as GET, without a body}
+        '404': {description: Unknown or revoked code}
+        '410': {description: Expired code}
+        '429': {description: Too many requests}
   /api/v1/links:
     get:
       responses: {'200': {description: Owner links}}
     post:
       parameters:
         - {$ref: '#/components/parameters/IdempotencyKey'}
+        - {$ref: '#/components/parameters/APIClient'}
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/CreateLink'}}}
       responses: {'201': {description: Created}, '409': {description: Idempotency conflict}}
+    delete:
+      description: Revoke by owner-scoped idempotency key even when the creation response was lost. The key remains retired and cannot create a new link.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: {type: string, pattern: '^[a-f0-9]{64}$'}
+        - name: X-Shortlinks-Client
+          in: header
+          required: true
+          schema: {type: string, const: api}
+      responses: {'204': {description: Revoked or key retired}, '400': {description: Invalid key or nonempty body}, '401': {description: Unauthorized}, '403': {description: Forbidden}}
   /api/v1/links/{id}:
     parameters: [{name: id, in: path, required: true, schema: {type: string}}]
     get: {responses: {'200': {description: Link}, '404': {description: Not found}}}
-    delete: {responses: {'204': {description: Revoked}, '404': {description: Not found}}}
+    delete:
+      parameters:
+        - {$ref: '#/components/parameters/APIClient'}
+      responses:
+        '204': {description: Revoked or already absent for this owner}
+        '401': {description: Unauthorized}
+        '403': {description: Forbidden}
 components:
+  securitySchemes:
+    ProxyBearer:
+      type: http
+      scheme: bearer
+      description: Validated only by the reverse proxy, with exact /links group membership. The backend proxy assertion is never a client credential.
   parameters:
+    APIClient:
+      name: X-Shortlinks-Client
+      in: header
+      required: true
+      schema: {type: string, const: api}
     IdempotencyKey: {name: Idempotency-Key, in: header, schema: {type: string, maxLength: 128}}
   schemas:
     CreateLink:
@@ -36,7 +87,7 @@ components:
       required: [id, code, short_url, url, title, created_at]
       properties:
         id: {type: string}
-        code: {type: string, minLength: 8, maxLength: 8}
+        code: {type: string, pattern: '^[A-Za-z0-9]{8}$'}
         short_url: {type: string, format: uri}
         url: {type: string, format: uri}
         title: {type: string}

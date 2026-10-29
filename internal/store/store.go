@@ -54,6 +54,7 @@ func Open(ctx context.Context, path string, key []byte) (*Store, error) {
  CREATE TABLE IF NOT EXISTS links (id TEXT PRIMARY KEY, code_hash BLOB NOT NULL UNIQUE, code TEXT NOT NULL, owner TEXT NOT NULL, target BLOB NOT NULL, title TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER, pending_since INTEGER, last_checked_at INTEGER, next_check_at INTEGER NOT NULL, lease_until INTEGER, revision INTEGER NOT NULL DEFAULT 0, revoked_at INTEGER);
  CREATE INDEX IF NOT EXISTS links_due ON links(next_check_at, lease_until);
  CREATE TABLE IF NOT EXISTS retired_codes (code_hash BLOB PRIMARY KEY, retired_at INTEGER NOT NULL);
+ CREATE TABLE IF NOT EXISTS revoked_idempotency (owner TEXT NOT NULL, key TEXT NOT NULL, revoked_at INTEGER NOT NULL, PRIMARY KEY(owner,key));
  CREATE TABLE IF NOT EXISTS idempotency (owner TEXT NOT NULL, key TEXT NOT NULL, body_hash BLOB NOT NULL, link_id TEXT NOT NULL, PRIMARY KEY(owner,key), FOREIGN KEY(link_id) REFERENCES links(id));`)
 	if err != nil {
 		_ = db.Close()
@@ -133,6 +134,14 @@ func (s *Store) Create(ctx context.Context, owner, id, code, url, title string, 
 	}
 	defer tx.Rollback()
 	if idem != "" {
+		var revoked int
+		e = tx.QueryRowContext(ctx, "SELECT 1 FROM revoked_idempotency WHERE owner=? AND key=?", owner, idem).Scan(&revoked)
+		if e == nil {
+			return Link{}, ErrIdempotencyConflict
+		}
+		if e != sql.ErrNoRows {
+			return Link{}, e
+		}
 		var old []byte
 		var lid string
 		e = tx.QueryRowContext(ctx, "SELECT body_hash,link_id FROM idempotency WHERE owner=? AND key=?", owner, idem).Scan(&old, &lid)
@@ -169,6 +178,43 @@ func (s *Store) Create(ctx context.Context, owner, id, code, url, title string, 
 		return Link{}, e
 	}
 	return s.Get(ctx, owner, id)
+}
+
+// RevokeKey permanently prevents a future create with owner/key and revokes
+// the linked record when an idempotent create already committed.
+func (s *Store) RevokeKey(ctx context.Context, owner, key string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	now := s.now().UTC().UnixNano()
+	if _, err = tx.ExecContext(ctx, "INSERT OR IGNORE INTO revoked_idempotency(owner,key,revoked_at) VALUES(?,?,?)", owner, key, now); err != nil {
+		return err
+	}
+	var id string
+	err = tx.QueryRowContext(ctx, "SELECT link_id FROM idempotency WHERE owner=? AND key=?", owner, key).Scan(&id)
+	if err == sql.ErrNoRows {
+		return tx.Commit()
+	}
+	if err != nil {
+		return err
+	}
+	var h []byte
+	err = tx.QueryRowContext(ctx, "SELECT code_hash FROM links WHERE id=? AND owner=? AND revoked_at IS NULL", id, owner).Scan(&h)
+	if err == sql.ErrNoRows {
+		return tx.Commit()
+	}
+	if err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, "UPDATE links SET revoked_at=?,target=X'',lease_until=NULL,revision=revision+1 WHERE id=? AND owner=?", now, id, owner); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, "INSERT OR IGNORE INTO retired_codes(code_hash,retired_at) VALUES(?,?)", h, now); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 func (s *Store) Get(ctx context.Context, owner, id string) (Link, error) {
 	l, e := scan(s.db.QueryRowContext(ctx, "SELECT id,code,target,title,created_at,expires_at,pending_since,last_checked_at,next_check_at,revision FROM links WHERE owner=? AND id=? AND revoked_at IS NULL", owner, id), s)
