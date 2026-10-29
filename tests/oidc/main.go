@@ -179,7 +179,7 @@ func waitReady(client *http.Client, address string, done <-chan error) error {
 		}
 		select {
 		case err := <-done:
-			return fmt.Errorf("oauth2-proxy exited before readiness: %w", err)
+			return fmt.Errorf("oauth2-proxy exited before readiness (check Docker setup, preloaded fixture image, and proxy configuration): %w", err)
 		default:
 		}
 		time.Sleep(50 * time.Millisecond)

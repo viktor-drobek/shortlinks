@@ -33,6 +33,8 @@ jobs:
         run: go vet ./...
       - name: Test reverse-proxy trust boundary
         run: go run ./tests/proxy
+      - name: Load pinned OIDC fixture image
+        run: docker pull quay.io/oauth2-proxy/oauth2-proxy:v7.15.4-alpine
       - name: Test OIDC bearer and group contract
         run: go run ./tests/oidc
       - name: Install pinned security tools
