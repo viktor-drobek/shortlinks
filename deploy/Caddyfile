@@ -12,6 +12,9 @@
 
 {$SHORTLINKS_HOST:s.2050.su} {
 	header Referrer-Policy no-referrer
+	@manage path /manage /manage/*
+	# Override the upstream policy only for native management forms.
+	header @manage >Referrer-Policy same-origin
 	header X-Content-Type-Options nosniff
 	route {
 		request_header -X-Shortlinks-Proxy-Key

@@ -57,6 +57,7 @@ func run() error {
 	}))
 	defer auth.Close()
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Referrer-Policy", "no-referrer")
 		if r.Header.Get("X-Shortlinks-Proxy-Key") != fixtureKey {
 			w.WriteHeader(502)
 			return
@@ -170,6 +171,8 @@ func run() error {
 		{"api-missing-user", "/api/v1/links", "missing-user", "", false, 403},
 		{"api-member", "/api/v1/links", "member", "", false, 200},
 		{"api-multiple", "/api/v1/links", "multiple", "", false, 200},
+		{"browser-member", "/manage", "member", "text/html", false, 200},
+		{"browser-delete-member", "/manage/fixture/delete", "member", "text/html", false, 200},
 		{"browser-login", "/manage", "", "text/html", false, 302},
 		{"browser-forbidden", "/manage", "forbidden", "text/html", false, 403},
 		{"auth-unavailable", "/api/v1/links", "unavailable", "", false, 503},
@@ -200,6 +203,13 @@ func run() error {
 		}
 		if resp.StatusCode != tt.want {
 			return fmt.Errorf("%s: got %d want %d", tt.name, resp.StatusCode, tt.want)
+		}
+		policy := "no-referrer"
+		if tt.path == "/manage" || strings.HasPrefix(tt.path, "/manage/") {
+			policy = "same-origin"
+		}
+		if values := resp.Header.Values("Referrer-Policy"); len(values) == 0 || values[len(values)-1] != policy {
+			return fmt.Errorf("%s: referrer policy %v, want final %s", tt.name, values, policy)
 		}
 		fmt.Printf("PASS %s\n", tt.name)
 	}

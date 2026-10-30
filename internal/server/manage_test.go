@@ -19,6 +19,9 @@ func TestManageFormCSRFAndAssets(t *testing.T) {
 	if w.Code != 200 || !strings.Contains(w.Body.String(), "name=\"csrf\"") {
 		t.Fatalf("form=%d", w.Code)
 	}
+	if got := w.Header().Get("Referrer-Policy"); got != "same-origin" {
+		t.Fatalf("native form Origin must be preserved, policy=%q", got)
+	}
 	for _, path := range []string{"/static/style.css", "/static/app.js"} {
 		w = httptest.NewRecorder()
 		h.ServeHTTP(w, request("GET", path, ""))
@@ -36,6 +39,11 @@ func TestManageFormCSRFAndAssets(t *testing.T) {
 		return w
 	}
 	form := url.Values{"url": {target}, "title": {"<script>alert(1)</script>"}, "csrf": {s.csrf("alice")}}
+	for _, origin := range []string{"", "null"} {
+		if w := post(form.Encode(), origin); w.Code != 403 {
+			t.Fatalf("opaque or missing Origin %q=%d", origin, w.Code)
+		}
+	}
 	if w := post(form.Encode(), "https://evil.example"); w.Code != 403 {
 		t.Fatalf("foreign Origin=%d", w.Code)
 	}

@@ -341,6 +341,8 @@ func (s *Server) renderManage(w http.ResponseWriter, r *http.Request, owner, err
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// Native form navigation needs a non-opaque Origin for the CSRF check.
+	w.Header().Set("Referrer-Policy", "same-origin")
 	_, _ = w.Write(b.Bytes())
 }
 func (s *Server) parseManageForm(w http.ResponseWriter, r *http.Request) bool {
